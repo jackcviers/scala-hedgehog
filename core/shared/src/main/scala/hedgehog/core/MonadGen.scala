@@ -2,7 +2,6 @@ package hedgehog.core
 
 import hedgehog.Size
 import hedgehog.predef._
-import scala.util.control.TailCalls
 
 trait MonadGenT[M[_]] {
 
@@ -31,14 +30,8 @@ object MonadGenT {
   implicit def StateTMonadGenT[M[_], S](implicit F: Functor[M], G: MonadGenT[M]): MonadGenT[StateT[M, S, *]] =
     new MonadGenT[StateT[M, S, *]] {
 
-      def lift[A](gen: GenT[A]): StateT[M, S, A] = {
-        def liftTailRec = TailCalls.done(
-          G.lift(gen)
-        ).flatMap{ m =>
-          TailCalls.done(StateT((s:S) => F.map(m)(a => (s, a))))
-        }
-        liftTailRec.result
-      }
+      def lift[A](gen: GenT[A]): StateT[M, S, A] =
+        StateT(s => F.map(G.lift(gen))(a => (s, a)))
 
       def scale[A](gen: StateT[M, S, A], f: Size => Size): StateT[M, S, A] =
         gen.hoist(a =>  G.scale(a, f))
