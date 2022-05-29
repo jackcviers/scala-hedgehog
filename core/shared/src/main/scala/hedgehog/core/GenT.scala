@@ -2,6 +2,8 @@ package hedgehog.core
 
 import hedgehog._
 import hedgehog.predef._
+import scala.util.control.TailCalls
+import scala.util.control.TailCalls.TailRec
 
 /**
  * Generator for random values of `A`.
@@ -32,7 +34,7 @@ case class GenT[A](run: (Size, Seed) => Tree[(Seed, Option[A])]) {
 
   /**
    * Throw away a generator's shrink tree.
-   */
+    */
   def prune: GenT[A] =
     mapTree(_.prune)
 
@@ -72,7 +74,7 @@ case class GenT[A](run: (Size, Seed) => Tree[(Seed, Option[A])]) {
 
   /**
    * Adjust the size parameter by transforming it with the given function.
-   */
+    */
   def scale(f: Size => Size): GenT[A] =
     Gen.sized(n => resize(f(n)))
 
@@ -138,8 +140,13 @@ abstract class GenImplicits2 extends GenImplicits1 {
 
   implicit def GenApplicative: Applicative[GenT] =
     new Applicative[GenT] {
-      def point[A](a: => A): GenT[A] =
-        GenT((_, s) => Tree.TreeApplicative.point((s, Some(a))))
+      def point[A](a: => A): GenT[A] ={
+        def pointTailRec(s:Seed):TailRec[Tree[(Seed, Option[A])]] =
+          TailCalls.done(
+            Tree.TreeApplicative.point((s, Some(a)))
+          )
+        GenT((_, s) => pointTailRec(s).result)
+      }
       override def ap[A, B](fa: => GenT[A])(f: => GenT[A => B]): GenT[B] =
         GenT((size, seed) => {
           val f2 = f.run(size, seed)
@@ -159,8 +166,12 @@ object GenT extends GenImplicits2 {
      override def map[A, B](fa: GenT[A])(f: A => B): GenT[B] =
        fa.map(f)
 
-     override def point[A](a: => A): GenT[A] =
-       GenApplicative.point(a)
+     override def point[A](a: => A): GenT[A] ={
+       def pointTailRec: TailRec[GenT[A]] = TailCalls.done(
+         GenApplicative.point(a)
+       )
+       pointTailRec.result
+     }
 
      override def ap[A, B](fa: => GenT[A])(f: => GenT[A => B]): GenT[B] =
        GenApplicative.ap(fa)(f)
