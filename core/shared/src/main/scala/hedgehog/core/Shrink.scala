@@ -1,5 +1,7 @@
 package hedgehog.core
 
+import scala.util.control.TailCalls
+
 object Shrink extends XCompat {
 
   /**
@@ -82,16 +84,17 @@ object Shrink extends XCompat {
    * }}}
    */
   def removes[A](k0: Int, xs0: List[A]): List[List[A]] = {
-    def loop(k: Int, n: Int, xs: List[A]): List[List[A]] = {
+    def loop(k: Int, n: Int, xs: List[A]): TailCalls.TailRec[List[List[A]]] = {
       val (hd, tl) = xs.splitAt(k)
       if (k > n)
-        Nil
+        TailCalls.done(Nil)
       else if (tl.isEmpty)
-        List(Nil)
-      else
-        tl :: loop(k, n - k, tl).map(hd ++ _)
+        TailCalls.done(List(Nil))
+      else loop(k, n - k, tl).flatMap{ lla =>
+        TailCalls.done(tl :: lla.map(hd ++ _))
+      }
     }
-    loop(k0, xs0.length, xs0)
+    loop(k0, xs0.length, xs0).result
   }
 
   /**
