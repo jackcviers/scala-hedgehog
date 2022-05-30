@@ -1,5 +1,7 @@
 package hedgehog
 
+import scala.util.control.TailCalls
+
 /**
  * We have our own FP predef for 2 reasons.
  *
@@ -50,11 +52,30 @@ package object predef {
   def sequence[M[_], A](fa: List[M[A]])(implicit F: Applicative[M]): M[List[A]] =
     traverse(fa)(identity)
 
-  def traverse[M[_], A, B](fa: List[A])(f: A => M[B])(implicit F: Applicative[M]): M[List[B]] =
-    fa match {
-      case Nil =>
-        F.point(Nil)
-      case h :: t =>
-        F.ap(traverse(t)(f))(F.ap(f(h))(F.point((h2 : B) => (t2 : List[B]) => h2 :: t2)))
-    }
+  def traverse[M[_], A, B](fa: List[A])(f: A => M[B])(implicit F: Applicative[M]): M[List[B]] = {
+    def traverseTailRec(fa: List[A]): TailCalls.TailRec[M[List[B]]] =
+      fa match {
+        case Nil =>
+          TailCalls.done(F.point(Nil))
+        case h :: t =>
+          for{
+            headTailCall <- TailCalls.tailcall(
+              TailCalls.done(
+                traverse(t)(f))
+            )
+          } yield F.ap(
+            headTailCall
+          )(
+            F.ap(
+              f(h)
+            )(
+              F.point(
+                (h2 : B) => (t2 : List[B]) => h2 :: t2
+              )
+            )
+          )
+      }
+    traverseTailRec(fa).result
+  }
+    
 }
